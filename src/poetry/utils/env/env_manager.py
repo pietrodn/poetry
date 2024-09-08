@@ -540,6 +540,8 @@ class EnvManager:
 
                 python = self._full_python_path(python_name)
                 if python is None:
+                    python = self._search_uv_python(python_name)
+                if python is None:
                     continue
 
                 try:
@@ -775,3 +777,31 @@ class EnvManager:
         h_str = base64.urlsafe_b64encode(h_bytes).decode()[:8]
 
         return f"{sanitized_name}-{h_str}"
+
+    def _search_uv_python(self, python_name: str) -> Path | None:
+        """
+        Use `uv python find` to find a compatible Python version.
+
+        If uv is not installed or the return string is not an existing file,
+        return None and fail the search.
+        """
+        try:
+            uv_python = subprocess.check_output(
+                ["uv", "python", "find", python_name],
+                text=True,
+            ).strip()
+            self._io.write_error_line(
+                f"Found uv-provided Python: <c1>{uv_python}</c1>"
+            )
+        except CalledProcessError:
+            # uv is not installed or crashed. Fail the search.
+            return None
+
+        if uv_python == "":
+            # Python not found: uv stdout is an empty string
+            return None
+        python_path = Path(uv_python)
+        if python_path.is_file():
+            return python_path
+
+        return None

@@ -5,6 +5,7 @@ import os
 import sys
 
 from pathlib import Path
+from subprocess import CalledProcessError
 from typing import TYPE_CHECKING
 from typing import Any
 
@@ -1326,3 +1327,61 @@ def test_generate_env_name_uses_real_path(
     venv_name1 = EnvManager.generate_env_name("simple-project", "the_real_dir")
     venv_name2 = EnvManager.generate_env_name("simple-project", "linked_dir")
     assert venv_name1 == venv_name2
+
+
+def test_search_uv_python_found(
+    manager: EnvManager,
+    mocker: MockerFixture,
+) -> None:
+    mocker.patch(
+        "subprocess.check_output",
+        side_effect=["/Users/user/.local/share/uv/python/cpython-3.12.5-macos-aarch64-none/bin/python3"],
+    )
+    mocker.patch(
+        "pathlib.Path.exists",
+        side_effect=[True],
+    )
+    path = manager._search_uv_python("python3.12")
+    assert isinstance(path, Path)
+    assert path == Path("/Users/user/.local/share/uv/python/cpython-3.12.5-macos-aarch64-none/bin/python3")
+
+
+def test_search_uv_python_no_uv_installed(
+    manager: EnvManager,
+    mocker: MockerFixture,
+) -> None:
+    mocker.patch(
+        "subprocess.check_output",
+        side_effect=CalledProcessError(127, "uv", "uv not found"),
+    )
+    path = manager._search_uv_python("python3.12")
+    assert path is None
+
+
+def test_search_uv_python_not_found(
+    manager: EnvManager,
+    mocker: MockerFixture,
+) -> None:
+    mocker.patch(
+        "subprocess.check_output",
+        # uv writes on stderr if the Python path is not found, and stdout is empty
+        side_effect=[""],
+    )
+    path = manager._search_uv_python("python3.12")
+    assert path is None
+
+
+def test_search_uv_python_not_exists(
+    manager: EnvManager,
+    mocker: MockerFixture,
+) -> None:
+    mocker.patch(
+        "subprocess.check_output",
+        side_effect=lambda *args, **kwargs: "/Users/user/.local/share/uv/python/cpython-3.12.5-macos-aarch64-none/bin/python3",
+    )
+    mocker.patch(
+        "pathlib.Path.exists",
+        side_effect=[False],
+    )
+    path = manager._search_uv_python("python3.12")
+    assert path is None
